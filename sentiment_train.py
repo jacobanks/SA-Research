@@ -6,7 +6,7 @@ from keras.layers import LSTM
 from keras.layers.embeddings import Embedding
 from keras.layers import Bidirectional
 from keras.layers import Dropout
-import utility_functions as uf
+import helpers as helper
 from keras.models import load_model
 from nltk.tokenize import word_tokenize, sent_tokenize
 from nltk import FreqDist
@@ -20,11 +20,11 @@ import re, string
 
 def load_training_data(gloveFile):
     # Load embeddings for the filtered glove list
-    weight_matrix, word_idx = uf.load_embeddings(gloveFile)
+    weight_matrix, word_idx = helper.load_embeddings(gloveFile)
 
     # create test, validation and trainng data
-    all_data = uf.read_data()
-    train_data, test_data, dev_data = uf.training_data_split(all_data, 0.8)
+    all_data = helper.read_data()
+    train_data, test_data, dev_data = helper.training_data_split(all_data, 0.8)
 
     train_data = train_data.reset_index()
     dev_data = dev_data.reset_index()
@@ -33,14 +33,14 @@ def load_training_data(gloveFile):
     maxSeqLength = 280
 
     # load Training data matrix
-    train_x = uf.embed_words(train_data, word_idx, maxSeqLength)
-    test_x = uf.embed_words(test_data, word_idx, maxSeqLength)
-    val_x = uf.embed_words(dev_data, word_idx, maxSeqLength)
+    train_x = helper.embed_words(train_data, word_idx, maxSeqLength)
+    test_x = helper.embed_words(test_data, word_idx, maxSeqLength)
+    val_x = helper.embed_words(dev_data, word_idx, maxSeqLength)
 
     # load labels data matrix
-    train_y = uf.labels_matrix(train_data)
-    val_y = uf.labels_matrix(dev_data)
-    test_y = uf.labels_matrix(test_data)
+    train_y = helper.labels_matrix(train_data)
+    val_y = helper.labels_matrix(dev_data)
+    test_y = helper.labels_matrix(test_data)
 
     return train_x, train_y, test_x, test_y, val_x, val_y, weight_matrix, word_idx
 
@@ -178,7 +178,7 @@ if __name__ == "__main__":
         print("Saved model to disk")
     else:
         print("Predicting...")
-        weight_matrix, word_idx = uf.load_embeddings(gloveFile)
+        weight_matrix, word_idx = helper.load_embeddings(gloveFile)
         weight_path = ['model/best_model_100_2.hdf5']
 
         # nlp = spacy.load("en_core_web_sm")
