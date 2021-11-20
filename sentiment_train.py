@@ -10,15 +10,14 @@ import helpers as helper
 from keras.models import load_model
 from nltk.tokenize import word_tokenize, sent_tokenize
 from nltk import FreqDist
-# from nltk.stem.wordnet import WordNetLemmatizer
-from nltk.corpus import stopwords
-# from nltk.tag import pos_tag
+from nltk.stem.wordnet import WordNetLemmatizer
+from nltk.tag import pos_tag
 import json
 import emoji
 import contractions
 import re, string
 
-def load_training_data(gloveFile):
+def load_training_data(gloveFile, max_words):
     # Load embeddings for the filtered glove list
     weight_matrix, word_idx = helper.load_embeddings(gloveFile)
 
@@ -30,12 +29,10 @@ def load_training_data(gloveFile):
     dev_data = dev_data.reset_index()
     test_data = test_data.reset_index()
 
-    maxSeqLength = 280
-
     # load Training data matrix
-    train_x = helper.embed_words(train_data, word_idx, maxSeqLength)
-    test_x = helper.embed_words(test_data, word_idx, maxSeqLength)
-    val_x = helper.embed_words(dev_data, word_idx, maxSeqLength)
+    train_x = helper.embed_words(train_data, word_idx, max_words)
+    test_x = helper.embed_words(test_data, word_idx, max_words)
+    val_x = helper.embed_words(dev_data, word_idx, max_words)
 
     # load labels data matrix
     train_y = helper.labels_matrix(train_data)
@@ -60,7 +57,7 @@ def build_model(weight_matrix, max_words, EMBEDDING_DIM):
 
 def train_model(model, num_epochs, train_x, train_y, test_x, test_y, val_x, val_y, batch_size) :
     # save the best model and early stopping
-    saveBestModel = keras.callbacks.ModelCheckpoint('model/best_model_100_2.hdf5', monitor='val_accuracy', verbose=0, save_best_only=True, save_weights_only=False, mode='auto', save_freq='epoch')
+    saveBestModel = keras.callbacks.ModelCheckpoint('model/best_model_56_2000.hdf5', monitor='val_accuracy', verbose=0, save_best_only=True, save_weights_only=False, mode='auto', save_freq='epoch')
     earlyStopping = keras.callbacks.EarlyStopping(monitor='val_loss', min_delta=0, patience=5, verbose=0, mode='auto')
 
     # Fit the model
@@ -73,32 +70,30 @@ def train_model(model, num_epochs, train_x, train_y, test_x, test_y, val_x, val_
 
     return model
 
-def predict_sentiments(trained_model, data, word_idx, max_words):
+def predict_sentiments(trained_model, input_text, word_idx, max_words):
     live_list = []
     live_list_np = np.zeros((max_words,1))
-    # split the sentence into its words and remove any punctuations.
-    unprocessed_tokens = word_tokenize(contractions.fix(data))
+    # split the sentence into its words and remove any punctuations
+    input_text = re.sub('http[s]?://(?:[a-zA-Z]|[0-9]|[$-_@.&+#]|[!*\(\),]|'\
+                        '(?:%[0-9a-fA-F][0-9a-fA-F]))+','', input_text)
+    input_text = re.sub("(@[A-Za-z0-9_]+)","", input_text)
+    unprocessed_tokens = word_tokenize(contractions.fix(input_text))
     processed_tokens = []
     # stop_words = stopwords.words('english')
 
-    for token in unprocessed_tokens:
+    for token, tag in pos_tag(unprocessed_tokens):
         if token not in string.punctuation:
-            token = re.sub('http[s]?://(?:[a-zA-Z]|[0-9]|[$-_@.&+#]|[!*\(\),]|'\
-                        '(?:%[0-9a-fA-F][0-9a-fA-F]))+','', token)
-            token = re.sub("(@[A-Za-z0-9_]+)","", token)
-            token = re.sub('\'.*?\s',' ', token)
-            token = re.sub(r'http\S+',' ', token)
             token = emoji.get_emoji_regexp().sub(u'', token)
             token = token.lower()
-            # if tag.startswith("NN"):
-            #     pos = 'n'
-            # elif tag.startswith('VB'):
-            #     pos = 'v'
-            # else:
-            #     pos = 'a'
+            if tag.startswith("NN"):
+                pos = 'n'
+            elif tag.startswith('VB'):
+                pos = 'v'
+            else:
+                pos = 'a'
 
-            # lemmatizer = WordNetLemmatizer()
-            # token = lemmatizer.lemmatize(token, pos)
+            lemmatizer = WordNetLemmatizer()
+            token = lemmatizer.lemmatize(token, pos)
             processed_tokens.append(token)
 
     print(processed_tokens)
@@ -159,39 +154,37 @@ def predict_sentiments(trained_model, data, word_idx, max_words):
 
 if __name__ == "__main__":
     max_words = 56 # max no of words in training data
-    batch_size = 750 # batch size for training
+    batch_size = 2000 # batch size for training
     EMBEDDING_DIM = 200 # size of the word embeddings
-    train_flag = False # set True if in training mode else False if in prediction mode
+    train_flag = True # set True if in training mode else False if in prediction mode
     epochs = 100
     gloveFile = 'Data/glove/glove.twitter.27B/glove.twitter.27B.200d.txt'
 
     if train_flag:
         # Load Training Data
-        train_x, train_y, test_x, test_y, val_x, val_y, weight_matrix, word_idx = load_training_data(gloveFile)
+        train_x, train_y, test_x, test_y, val_x, val_y, weight_matrix, word_idx = load_training_data(gloveFile, max_words)
         # create lstm model
         model = build_model(weight_matrix, max_words, EMBEDDING_DIM)
         # train the model
         trained_model = train_model(model, epochs, train_x, train_y, test_x, test_y, val_x, val_y, batch_size)
 
         # serialize weights to HDF5
-        model.save("model/best_model_final_100_2.hdf5")
+        model.save("model/best_model_56_2000_final.hdf5")
         print("Saved model to disk")
     else:
         print("Predicting...")
         weight_matrix, word_idx = helper.load_embeddings(gloveFile)
-        weight_path = ['model/best_model_100_2.hdf5']
-
-        # nlp = spacy.load("en_core_web_sm")
+        weight_path = ['model/best_model_100.hdf5']
 
         for model in weight_path:
             loaded_model = load_model(model)
             loaded_model.summary()
 
             print("Loading data...")
-            # biden_file = open('../../SA-Research/experiment-data/biden_comments.json',)
+            # biden_file = open('biden_comments.json',)
             # biden_submissions = json.load(biden_file)
 
-            biden_submissions = ["Biden isn't the best president ever.", "Biden is the best president ever.", "Biden is awesome", "I don't know about Biden.", "Biden is terrible!", "I don't like Biden."]
+            biden_submissions = ["Biden isn't the best president ever.", "Biden is the best president ever. https://github.com/jacobanks", "Biden is awesome", "I don't know about Biden.", "Biden is terrible!", "I don't like Biden."]
 
             print("Predicting Sentiment...")
             scores = []
@@ -222,7 +215,7 @@ if __name__ == "__main__":
                 #     scores.append("biden")
                 # scores.append("short comment")
 
-                if len(word_tokenize(input_text)) < 280:
+                if len(word_tokenize(input_text)) < 56:
                     result = predict_sentiments(loaded_model, input_text, word_idx, max_words)
                 #     break
             

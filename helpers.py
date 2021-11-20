@@ -2,8 +2,8 @@ import pandas as pd
 import numpy as np
 import codecs
 import os
-# from nltk.stem.wordnet import WordNetLemmatizer
-# from nltk.tag import pos_tag
+from nltk.stem.wordnet import WordNetLemmatizer
+from nltk.tag import pos_tag
 import contractions
 from nltk.tokenize import word_tokenize
 
@@ -73,8 +73,18 @@ def embed_words(data, word_idx, max_seq_len):
         lengths.append(len(sentence_words))
 
         i = 0
-        for word in sentence_words:
+        for word, tag in pos_tag(sentence_words):
             word_lwr = word.lower()
+            if tag.startswith("NN"):
+                pos = 'n'
+            elif tag.startswith('VB'):
+                pos = 'v'
+            else:
+                pos = 'a'
+
+            lemmatizer = WordNetLemmatizer()
+            word_lwr = lemmatizer.lemmatize(word_lwr, pos)
+
             try:
                 ids[idx][i] =  word_idx_lwr[word_lwr]
             except Exception as e:
