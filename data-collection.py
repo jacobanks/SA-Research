@@ -66,8 +66,8 @@ with open('biden_comments.json', 'r') as outfile:
 #                 with open(search + '_comments.json', 'w') as outfile:
 #                     outfile.write(json.dumps(comments, indent=4))
             
-#             if count >= 500000:
-#                 break
-#             print("\rFetching PSAW {} posts... fetched {} posts.".format(search, count), end="")
+            # if count >= 500000:
+            #     break
+            # print("\rFetching PSAW {} posts... fetched {} posts.".format(search, count), end="")
         
 #     print(len(comments))

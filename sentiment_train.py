@@ -1,11 +1,14 @@
 import numpy as np
 import keras
+import tensorflow as tf
 from keras.models import Sequential
 from keras.layers import Dense
 from keras.layers import LSTM
 from keras.layers.embeddings import Embedding
 from keras.layers import Bidirectional
 from keras.layers import Dropout
+import keras_tuner as kt
+from keras_tuner.tuners import RandomSearch, Hyperband, BayesianOptimization
 import helpers as helper
 from keras.models import load_model
 from nltk.tokenize import word_tokenize, sent_tokenize
@@ -40,46 +43,40 @@ def load_training_data(gloveFile, max_words):
     test_y = helper.labels_matrix(test_data)
 
     return train_x, train_y, test_x, test_y, val_x, val_y, weight_matrix, word_idx
-
+        
 def build_model(weight_matrix, max_words, EMBEDDING_DIM):
     # create the model
     model = Sequential()
     model.add(Embedding(len(weight_matrix), EMBEDDING_DIM, weights=[weight_matrix], input_length=max_words, trainable=False))
-    model.add(Bidirectional(LSTM(128, dropout=0.2, recurrent_dropout=0.2, activation='tanh')))
-    model.add(Dense(512, activation='relu'))
+    model.add(Bidirectional(LSTM(512, dropout=0.3, activation='tanh')))
+    model.add(Dense(512, activation='sigmoid'))
     model.add(Dropout(0.50))
     model.add(Dense(5, activation='softmax'))
     # try using different optimizers and different optimizer configs
     model.compile(loss='categorical_crossentropy', optimizer='adam', metrics=['accuracy'])
     print(model.summary())
-
     return model
 
 def train_model(model, num_epochs, train_x, train_y, test_x, test_y, val_x, val_y, batch_size) :
     # save the best model and early stopping
-    saveBestModel = keras.callbacks.ModelCheckpoint('model/best_model_56_2000.hdf5', monitor='val_accuracy', verbose=0, save_best_only=True, save_weights_only=False, mode='auto', save_freq='epoch')
-    earlyStopping = keras.callbacks.EarlyStopping(monitor='val_loss', min_delta=0, patience=5, verbose=0, mode='auto')
+    saveBestModel = keras.callbacks.ModelCheckpoint('model/optimized_model.hdf5', monitor='val_accuracy', verbose=0, save_best_only=True, save_weights_only=False, mode='auto', save_freq='epoch')
+    earlyStopping = keras.callbacks.EarlyStopping(monitor='val_loss', min_delta=0, patience=5, verbose=1, mode='auto')
 
     # Fit the model
     model.fit(train_x, train_y, batch_size=batch_size, epochs=num_epochs, validation_data=(val_x, val_y), callbacks=[saveBestModel, earlyStopping])
     # Final evaluation of the model
     score, acc = model.evaluate(test_x, test_y, batch_size=batch_size)
-
     print('Test score:', score)
     print('Test accuracy:', acc)
 
     return model
 
-def predict_sentiments(trained_model, input_text, word_idx, max_words):
-    live_list = []
-    live_list_np = np.zeros((max_words,1))
-    # split the sentence into its words and remove any punctuations
+def process_text(input_text):
     input_text = re.sub('http[s]?://(?:[a-zA-Z]|[0-9]|[$-_@.&+#]|[!*\(\),]|'\
                         '(?:%[0-9a-fA-F][0-9a-fA-F]))+','', input_text)
     input_text = re.sub("(@[A-Za-z0-9_]+)","", input_text)
     unprocessed_tokens = word_tokenize(contractions.fix(input_text))
     processed_tokens = []
-    # stop_words = stopwords.words('english')
 
     for token, tag in pos_tag(unprocessed_tokens):
         if token not in string.punctuation:
@@ -95,27 +92,30 @@ def predict_sentiments(trained_model, input_text, word_idx, max_words):
             lemmatizer = WordNetLemmatizer()
             token = lemmatizer.lemmatize(token, pos)
             processed_tokens.append(token)
+    return processed_tokens
 
-    print(processed_tokens)
+def predict_sentiments(trained_model, input_text, word_idx, max_words):
+    live_list = []
+    live_list_np = np.zeros((max_words,1))
+    processed_tokens = process_text(input_text)
+    # print(processed_tokens)
 
     if len(processed_tokens) > max_words:
+        # Break text into chunks of max_words length
         chunks = [processed_tokens[i * max_words:(i + 1) * max_words] for i in range((len(processed_tokens) + max_words - 1) // max_words )] 
-
         scores = []
+        # Analyze each chunk
         for chunk in chunks:
             data_index = np.array([word_idx[word] if word in word_idx else 0 for word in chunk])
-
             # padded with zeros of length 280
             padded_array = np.zeros(max_words)
             padded_array[:data_index.shape[0]] = data_index
             data_index_np_pad = padded_array.astype(int)
             live_list.append(data_index_np_pad)
             live_list_np = np.asarray(live_list)
-            type(live_list_np)
 
             # get score from the model
             score = trained_model.predict(live_list_np, batch_size=1, verbose=0)
-
             # single_score = np.round(np.argmax(score)/5, decimals=2) # maximum of the array i.e single band
 
             # weighted score of top 3 bands
@@ -124,24 +124,21 @@ def predict_sentiments(trained_model, input_text, word_idx, max_words):
             top_3_weights = top_3_scores/np.sum(top_3_scores)
             single_score_dot = np.round(np.dot(top_3_index, top_3_weights)/5, decimals = 2)
             scores.append(single_score_dot)
+        # Get the average score of all the chunks
         final_score = np.mean(scores)
-        print(scores)
-        print(final_score)
     else:
         data_index = np.array([word_idx[word] if word in word_idx else 0 for word in processed_tokens])
-
         # padded with zeros of length 280
         padded_array = np.zeros(max_words)
         padded_array[:data_index.shape[0]] = data_index
         data_index_np_pad = padded_array.astype(int)
         live_list.append(data_index_np_pad)
         live_list_np = np.asarray(live_list)
-        type(live_list_np)
 
         # get score from the model
         score = trained_model.predict(live_list_np, batch_size=1, verbose=0)
-
         # single_score = np.round(np.argmax(score)/5, decimals=2) # maximum of the array i.e single band
+        # print("single_score: " + str(single_score))
 
         # weighted score of top 3 bands
         top_3_index = np.argsort(score)[0][-3:]
@@ -154,9 +151,9 @@ def predict_sentiments(trained_model, input_text, word_idx, max_words):
 
 if __name__ == "__main__":
     max_words = 56 # max no of words in training data
-    batch_size = 2000 # batch size for training
+    batch_size = 2048 # batch size for training
     EMBEDDING_DIM = 200 # size of the word embeddings
-    train_flag = True # set True if in training mode else False if in prediction mode
+    train_flag = False # set True if in training mode else False if in prediction mode
     epochs = 100
     gloveFile = 'Data/glove/glove.twitter.27B/glove.twitter.27B.200d.txt'
 
@@ -167,78 +164,61 @@ if __name__ == "__main__":
         model = build_model(weight_matrix, max_words, EMBEDDING_DIM)
         # train the model
         trained_model = train_model(model, epochs, train_x, train_y, test_x, test_y, val_x, val_y, batch_size)
-
         # serialize weights to HDF5
-        model.save("model/best_model_56_2000_final.hdf5")
+        trained_model.save("model/optimized_model_final.hdf5")
         print("Saved model to disk")
     else:
-        print("Predicting...")
         weight_matrix, word_idx = helper.load_embeddings(gloveFile)
-        weight_path = ['model/best_model_100.hdf5']
+        model = 'model/optimized_model_final.hdf5'
+        data = ['trump', 'biden']
 
-        for model in weight_path:
-            loaded_model = load_model(model)
-            loaded_model.summary()
+        print("Loading Model from " + model)
+        loaded_model = load_model(model)
+        loaded_model.summary()
 
-            print("Loading data...")
-            # biden_file = open('biden_comments.json',)
-            # biden_submissions = json.load(biden_file)
+        for file in data:
+            print("Loading data from " + file + "_comments.json")
+            submissions = json.load(open(file + "_comments.json",))
+            # submissions_test = ["Biden isn't the best president ever.", "Biden is the best president ever. https://github.com/jacobanks", "Biden is awesome", "I don't know about Biden.", "Biden is terrible!", "I don't like Biden."]
+            analyzed_text = []
 
-            biden_submissions = ["Biden isn't the best president ever.", "Biden is the best president ever. https://github.com/jacobanks", "Biden is awesome", "I don't know about Biden.", "Biden is terrible!", "I don't like Biden."]
+            count = 0
+            for data_sample in submissions:
+                input_text = data_sample["body"]
+                # if len(word_tokenize(input_text)) < 56:
+                print("\rPredicting sentiment polarity... analyzed {} posts.".format(count), end="")
+                if len(input_text) > 5:
+                    overall_result = predict_sentiments(loaded_model, input_text, word_idx, max_words)
 
-            print("Predicting Sentiment...")
-            scores = []
-            polarity_sum = []
-            for data_sample in biden_submissions:
-                input_text = data_sample
-                #if input_text contains the words 'trump' and 'biden'
-                # if 'trump' in input_text.lower() and 'biden' in input_text.lower():
-                #     sentences = sent_tokenize(input_text)
-                #     if len(sentences) > 1:                              # if the input text contains more than one sentence
-                #         scores.append("mixed sentences")
-                #         for sentence in sentences:
-                #             if 'trump' in sentence.lower(): 
-                #                 if 'biden' in sentence.lower():         # if the sentence contains both trump and biden
-                #                     scores.append("mixed sentence")
-                #                 else:                                   # if the sentence contains only trump
-                #                     scores.append("trump sentence")
-                #             elif 'biden' in sentence.lower():
-                #                 if 'trump' in sentence.lower():         # if the sentence contains both biden and trump
-                #                     scores.append("mixed sentence")
-                #                 else:                                   # if the sentence contains only biden
-                #                     scores.append("biden sentence")
-                #     else:                                               # if the input text contains only one sentence
-                #         scores.append("mixed single comment")
-                # elif 'trump' in input_text.lower():                     # if the input text contains only 'trump'
-                #     scores.append("trump")
-                # elif 'biden' in input_text.lower():                     # if the input text contains only 'biden'
-                #     scores.append("biden")
-                # scores.append("short comment")
+                    mentions_both_list = []
+                    if 'trump' in input_text.lower() and 'biden' in input_text.lower():
+                        sentences = sent_tokenize(input_text)
+                        if len(sentences) > 1:                              # if the input text contains more than one sentence
+                            for sentence in sentences:
+                                if 'trump' in sentence.lower() and 'biden' not in sentence.lower():                                 # if the sentence contains only trump
+                                    score = predict_sentiments(loaded_model, sentence, word_idx, max_words)
+                                    mentions_both_list.append({"sentence": sentence, "score": score, "topic": "trump"})
+                                elif 'biden' in sentence.lower() and 'trump' not in sentence.lower():                                 # if the sentence contains only biden
+                                    score = predict_sentiments(loaded_model, sentence, word_idx, max_words)
+                                    mentions_both_list.append({"sentence": sentence, "score": score, "topic": "biden"})
+                                elif 'biden' in sentence.lower() and 'trump' in sentence.lower():                                 # if the sentence contains both biden and trump
+                                    score = predict_sentiments(loaded_model, sentence, word_idx, max_words)
+                                    mentions_both_list.append({"sentence": sentence, "score": score, "topic": "both"})
+                                else:
+                                    score = predict_sentiments(loaded_model, sentence, word_idx, max_words)
+                                    mentions_both_list.append({"sentence": sentence, "score": score, "topic": "none"})
+                        else:  
+                            mentions_both_list.append({"topic": "both"})
+                    else:
+                        mentions_both_list.append({"topic": "none"})
 
-                if len(word_tokenize(input_text)) < 56:
-                    result = predict_sentiments(loaded_model, input_text, word_idx, max_words)
-                #     break
+                    analyzed_text.append({"id": data_sample['id'], "score": overall_result, "mentions": mentions_both_list})
+                
+                    count += 1
+                    if count % 1000 == 0:
+                        with open(file + '_comments_analyzed.json', 'w') as outfile:
+                            outfile.write(json.dumps(analyzed_text, indent=4))
             
-                    if result < 0.2:
-                        print(input_text + " -------- Very Negative Score: " + str(result))
-                        polarity_sum.append("Very Negative")
-                    elif result >= 0.2 and result < 0.4:
-                        print(input_text + " -------- Negative Score: " + str(result))
-                        polarity_sum.append("Negative")
-                    elif result >= 0.4 and result < 0.6:
-                        print(input_text + " -------- Neutral Score: " + str(result))
-                        polarity_sum.append("Neutral")
-                    elif result >= 0.6 and result < 0.8:
-                        print(input_text + " -------- Positive Score: " + str(result))
-                        polarity_sum.append("Positive")
-                    elif result >= 0.8:
-                        print(input_text + " -------- Very Positive Score: " + str(result))
-                        polarity_sum.append("Very Positive")
-            
-            freq_dist_pos = FreqDist(scores)
-            print("\nMost Common Scores: ")
-            print(freq_dist_pos.most_common(20))
-            #
-            # freq_dist_pos = FreqDist(polarity_sum)
-            # print("\nMost Common Sentiments: ")
-            # print(freq_dist_pos.most_common(5))
+            print("\nSaving analyzed text to " + file + "_comments_analyzed.json")
+            with open(file + '_comments_analyzed.json', 'w') as outfile:
+                outfile.write(json.dumps(analyzed_text, indent=4))

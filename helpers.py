@@ -94,7 +94,6 @@ def embed_words(data, word_idx, max_seq_len):
             i = i + 1
         idx = idx + 1
 
-    print(max(lengths))
     return ids
 
 def labels_matrix(data):
