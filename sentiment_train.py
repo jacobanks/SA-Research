@@ -1,24 +1,15 @@
 import numpy as np
 import keras
-import tensorflow as tf
 from keras.models import Sequential
 from keras.layers import Dense
 from keras.layers import LSTM
 from keras.layers.embeddings import Embedding
 from keras.layers import Bidirectional
 from keras.layers import Dropout
-import keras_tuner as kt
-from keras_tuner.tuners import RandomSearch, Hyperband, BayesianOptimization
-import helpers as helper
 from keras.models import load_model
-from nltk.tokenize import word_tokenize, sent_tokenize
-from nltk import FreqDist
-from nltk.stem.wordnet import WordNetLemmatizer
-from nltk.tag import pos_tag
+from nltk.tokenize import sent_tokenize
 import json
-import emoji
-import contractions
-import re, string
+import helpers as helper
 
 def load_training_data(gloveFile, max_words):
     # Load embeddings for the filtered glove list
@@ -71,62 +62,16 @@ def train_model(model, num_epochs, train_x, train_y, test_x, test_y, val_x, val_
 
     return model
 
-def process_text(input_text):
-    input_text = re.sub('http[s]?://(?:[a-zA-Z]|[0-9]|[$-_@.&+#]|[!*\(\),]|'\
-                        '(?:%[0-9a-fA-F][0-9a-fA-F]))+','', input_text)
-    input_text = re.sub("(@[A-Za-z0-9_]+)","", input_text)
-    unprocessed_tokens = word_tokenize(contractions.fix(input_text))
-    processed_tokens = []
-
-    for token, tag in pos_tag(unprocessed_tokens):
-        if token not in string.punctuation:
-            token = emoji.get_emoji_regexp().sub(u'', token)
-            if tag.startswith("NN"):
-                pos = 'n'
-            elif tag.startswith('VB'):
-                pos = 'v'
-            else:
-                pos = 'a'
-
-            lemmatizer = WordNetLemmatizer()
-            token = lemmatizer.lemmatize(token, pos)
-            processed_tokens.append(token)
-    return processed_tokens
-
 def predict_sentiments(trained_model, input_text, word_idx, max_words):
-    live_list = []
-    live_list_np = np.zeros((max_words,1))
-    processed_tokens = process_text(input_text)
-    # print(processed_tokens)
-
-    if len(processed_tokens) > max_words:
-        # Break text into chunks of max_words length
-        chunks = [processed_tokens[i * max_words:(i + 1) * max_words] for i in range((len(processed_tokens) + max_words - 1) // max_words )] 
-        scores = []
-        # Analyze each chunk
-        for chunk in chunks:
-            data_index = np.array([word_idx[word] if word in word_idx else 0 for word in chunk])
-            # padded with zeros of length 280
-            padded_array = np.zeros(max_words)
-            padded_array[:data_index.shape[0]] = data_index
-            data_index_np_pad = padded_array.astype(int)
-            live_list.append(data_index_np_pad)
-            live_list_np = np.asarray(live_list)
-
-            # get score from the model
-            score = trained_model.predict(live_list_np, batch_size=1, verbose=0)
-            # single_score = np.round(np.argmax(score)/5, decimals=2) # maximum of the array i.e single band
-
-            # weighted score of top 3 bands
-            top_3_index = np.argsort(score)[0][-3:]
-            top_3_scores = score[0][top_3_index]
-            top_3_weights = top_3_scores/np.sum(top_3_scores)
-            single_score_dot = np.round(np.dot(top_3_index, top_3_weights)/5, decimals = 2)
-            scores.append(single_score_dot)
-        # Get the average score of all the chunks
-        final_score = np.mean(scores)
-    else:
-        data_index = np.array([word_idx[word] if word in word_idx else 0 for word in processed_tokens])
+    processed_tokens = helper.process_input_text(input_text)
+    # Break text into chunks of max_words length
+    chunks = [processed_tokens[i * max_words:(i + 1) * max_words] for i in range((len(processed_tokens) + max_words - 1) // max_words )] 
+    scores = []
+    # Analyze each chunk
+    for chunk in chunks:
+        live_list = []
+        live_list_np = np.zeros((max_words,1))
+        data_index = np.array([word_idx[word] if word in word_idx else 0 for word in chunk])
         # padded with zeros of length 280
         padded_array = np.zeros(max_words)
         padded_array[:data_index.shape[0]] = data_index
@@ -137,14 +82,18 @@ def predict_sentiments(trained_model, input_text, word_idx, max_words):
         # get score from the model
         score = trained_model.predict(live_list_np, batch_size=1, verbose=0)
         # single_score = np.round(np.argmax(score)/5, decimals=2) # maximum of the array i.e single band
-        # print("single_score: " + str(single_score))
 
         # weighted score of top 3 bands
         top_3_index = np.argsort(score)[0][-3:]
         top_3_scores = score[0][top_3_index]
         top_3_weights = top_3_scores/np.sum(top_3_scores)
-        single_score_dot = np.round(np.dot(top_3_index, top_3_weights)/5, decimals = 2)
-        final_score = single_score_dot
+        final_score = np.round(np.dot(top_3_index, top_3_weights)/5, decimals = 2)
+        scores.append(score)
+
+    if len(scores) > 1:
+        final_score = np.mean(scores)     # Get the average score of all the chunks
+    else:
+        final_score = scores[0]
 
     return final_score
 
@@ -188,7 +137,6 @@ if __name__ == "__main__":
                 print("\rPredicting sentiment polarity... analyzed {} posts.".format(count), end="")
                 if len(input_text) > 5:                    
                     mentions_both_list = []
-
                     # Analyze parts that mention different candidates
                     if 'trump' in input_text and 'biden' in input_text:
                         sentences = sent_tokenize(input_text)

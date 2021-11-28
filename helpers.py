@@ -4,7 +4,7 @@ import codecs
 import os
 from nltk.stem.wordnet import WordNetLemmatizer
 from nltk.tag import pos_tag
-import contractions
+import re, string, emoji, contractions
 from nltk.tokenize import word_tokenize
 
 def load_embeddings(embedding_path):
@@ -107,3 +107,25 @@ def labels_matrix(data):
     labels_matrix = dummies.values
 
     return labels_matrix
+
+def process_input_text(input_text):
+    input_text = re.sub('http[s]?://(?:[a-zA-Z]|[0-9]|[$-_@.&+#]|[!*\(\),]|'\
+                        '(?:%[0-9a-fA-F][0-9a-fA-F]))+','', input_text)
+    input_text = re.sub("(@[A-Za-z0-9_]+)","", input_text)
+    unprocessed_tokens = word_tokenize(contractions.fix(input_text))
+    processed_tokens = []
+
+    for token, tag in pos_tag(unprocessed_tokens):
+        if token not in string.punctuation:
+            token = emoji.get_emoji_regexp().sub(u'', token)
+            if tag.startswith("NN"):
+                pos = 'n'
+            elif tag.startswith('VB'):
+                pos = 'v'
+            else:
+                pos = 'a'
+
+            lemmatizer = WordNetLemmatizer()
+            token = lemmatizer.lemmatize(token, pos)
+            processed_tokens.append(token)
+    return processed_tokens
