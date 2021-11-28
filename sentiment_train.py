@@ -81,7 +81,6 @@ def process_text(input_text):
     for token, tag in pos_tag(unprocessed_tokens):
         if token not in string.punctuation:
             token = emoji.get_emoji_regexp().sub(u'', token)
-            token = token.lower()
             if tag.startswith("NN"):
                 pos = 'n'
             elif tag.startswith('VB'):
@@ -184,24 +183,24 @@ if __name__ == "__main__":
 
             count = 0
             for data_sample in submissions:
-                input_text = data_sample["body"]
+                input_text = data_sample["body"].lower()
                 # if len(word_tokenize(input_text)) < 56:
                 print("\rPredicting sentiment polarity... analyzed {} posts.".format(count), end="")
-                if len(input_text) > 5:
-                    overall_result = predict_sentiments(loaded_model, input_text, word_idx, max_words)
-
+                if len(input_text) > 5:                    
                     mentions_both_list = []
-                    if 'trump' in input_text.lower() and 'biden' in input_text.lower():
+
+                    # Analyze parts that mention different candidates
+                    if 'trump' in input_text and 'biden' in input_text:
                         sentences = sent_tokenize(input_text)
                         if len(sentences) > 1:                              # if the input text contains more than one sentence
                             for sentence in sentences:
-                                if 'trump' in sentence.lower() and 'biden' not in sentence.lower():                                 # if the sentence contains only trump
+                                if 'trump' in sentence and 'biden' not in sentence:                                 # if the sentence contains only trump
                                     score = predict_sentiments(loaded_model, sentence, word_idx, max_words)
                                     mentions_both_list.append({"sentence": sentence, "score": score, "topic": "trump"})
-                                elif 'biden' in sentence.lower() and 'trump' not in sentence.lower():                                 # if the sentence contains only biden
+                                elif 'biden' in sentence and 'trump' not in sentence:                                 # if the sentence contains only biden
                                     score = predict_sentiments(loaded_model, sentence, word_idx, max_words)
                                     mentions_both_list.append({"sentence": sentence, "score": score, "topic": "biden"})
-                                elif 'biden' in sentence.lower() and 'trump' in sentence.lower():                                 # if the sentence contains both biden and trump
+                                elif 'biden' in sentence and 'trump' in sentence:                                 # if the sentence contains both biden and trump
                                     score = predict_sentiments(loaded_model, sentence, word_idx, max_words)
                                     mentions_both_list.append({"sentence": sentence, "score": score, "topic": "both"})
                                 else:
@@ -209,9 +208,15 @@ if __name__ == "__main__":
                                     mentions_both_list.append({"sentence": sentence, "score": score, "topic": "none"})
                         else:  
                             mentions_both_list.append({"topic": "both"})
+                    elif 'trump' in input_text:
+                        mentions_both_list.append({"topic": "trump"})
+                    elif 'biden' in input_text:
+                        mentions_both_list.append({"topic": "biden"})
                     else:
                         mentions_both_list.append({"topic": "none"})
 
+                    # Analyze whole post
+                    overall_result = predict_sentiments(loaded_model, input_text, word_idx, max_words)
                     analyzed_text.append({"id": data_sample['id'], "score": overall_result, "mentions": mentions_both_list})
                 
                     count += 1
