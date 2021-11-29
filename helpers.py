@@ -127,5 +127,7 @@ def process_input_text(input_text):
 
             lemmatizer = WordNetLemmatizer()
             token = lemmatizer.lemmatize(token, pos)
-            processed_tokens.append(token)
+            if len(token) > 0:
+                processed_tokens.append(token)
+                
     return processed_tokens

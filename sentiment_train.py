@@ -51,10 +51,10 @@ def build_model(weight_matrix, max_words, EMBEDDING_DIM):
 def train_model(model, num_epochs, train_x, train_y, test_x, test_y, val_x, val_y, batch_size) :
     # save the best model and early stopping
     saveBestModel = keras.callbacks.ModelCheckpoint('model/optimized_model.hdf5', monitor='val_accuracy', verbose=0, save_best_only=True, save_weights_only=False, mode='auto', save_freq='epoch')
-    earlyStopping = keras.callbacks.EarlyStopping(monitor='val_loss', min_delta=0, patience=5, verbose=1, mode='auto')
-
+    earlyStopping = keras.callbacks.EarlyStopping(monitor='val_loss', patience=15, verbose=1, mode='min')
+    # earlyStopping = keras.callbacks.EarlyStopping(monitor='val_accuracy', verbose=1, mode='max', min_delta=1)
     # Fit the model
-    model.fit(train_x, train_y, batch_size=batch_size, epochs=num_epochs, validation_data=(val_x, val_y), callbacks=[saveBestModel, earlyStopping])
+    model.fit(train_x, train_y, batch_size=batch_size, epochs=num_epochs, validation_data=(val_x, val_y), callbacks=[saveBestModel, earlyStopping], shuffle=True)
     # Final evaluation of the model
     score, acc = model.evaluate(test_x, test_y, batch_size=batch_size)
     print('Test score:', score)
@@ -67,6 +67,8 @@ def predict_sentiments(trained_model, input_text, word_idx, max_words):
     # Break text into chunks of max_words length
     chunks = [processed_tokens[i * max_words:(i + 1) * max_words] for i in range((len(processed_tokens) + max_words - 1) // max_words )] 
     scores = []
+    final_score = 0
+
     # Analyze each chunk
     for chunk in chunks:
         live_list = []
@@ -87,12 +89,12 @@ def predict_sentiments(trained_model, input_text, word_idx, max_words):
         top_3_index = np.argsort(score)[0][-3:]
         top_3_scores = score[0][top_3_index]
         top_3_weights = top_3_scores/np.sum(top_3_scores)
-        final_score = np.round(np.dot(top_3_index, top_3_weights)/5, decimals = 2)
-        scores.append(score)
+        top_3_score = np.round(np.dot(top_3_index, top_3_weights)/5, decimals = 2)
+        scores.append(top_3_score)
 
     if len(scores) > 1:
         final_score = np.mean(scores)     # Get the average score of all the chunks
-    else:
+    elif len(scores) == 1:
         final_score = scores[0]
 
     return final_score
@@ -113,65 +115,78 @@ if __name__ == "__main__":
         # train the model
         trained_model = train_model(model, epochs, train_x, train_y, test_x, test_y, val_x, val_y, batch_size)
         # serialize weights to HDF5
-        trained_model.save("model/optimized_model_final.hdf5")
+        trained_model.save("model/optimized_model_final_1.hdf5")
         print("Saved model to disk")
     else:
         weight_matrix, word_idx = helper.load_embeddings(gloveFile)
-        model = 'model/optimized_model_final.hdf5'
+        model = 'model/optimized_model.hdf5'
+        sites = ['Reddit', 'Twitter']
         data = ['trump', 'biden']
 
         print("Loading Model from " + model)
         loaded_model = load_model(model)
         loaded_model.summary()
 
-        for file in data:
-            print("Loading data from " + file + "_comments.json")
-            submissions = json.load(open(file + "_comments.json",))
-            # submissions_test = ["Biden isn't the best president ever.", "Biden is the best president ever. https://github.com/jacobanks", "Biden is awesome", "I don't know about Biden.", "Biden is terrible!", "I don't like Biden."]
-            analyzed_text = []
+        for site in sites:
+            for file in data:
+                print("Loading data from " + file + "_comments.json")
+                posts_file = 'Data/' + site + '/' + file
+                if site == 'Reddit':
+                    posts_file = posts_file + '_comments.json'
+                else:
+                    posts_file = posts_file + '_tweets.json'
 
-            count = 0
-            for data_sample in submissions:
-                input_text = data_sample["body"].lower()
-                # if len(word_tokenize(input_text)) < 56:
-                print("\rPredicting sentiment polarity... analyzed {} posts.".format(count), end="")
-                if len(input_text) > 5:                    
-                    mentions_both_list = []
-                    # Analyze parts that mention different candidates
-                    if 'trump' in input_text and 'biden' in input_text:
-                        sentences = sent_tokenize(input_text)
-                        if len(sentences) > 1:                              # if the input text contains more than one sentence
-                            for sentence in sentences:
-                                if 'trump' in sentence and 'biden' not in sentence:                                 # if the sentence contains only trump
-                                    score = predict_sentiments(loaded_model, sentence, word_idx, max_words)
-                                    mentions_both_list.append({"sentence": sentence, "score": score, "topic": "trump"})
-                                elif 'biden' in sentence and 'trump' not in sentence:                                 # if the sentence contains only biden
-                                    score = predict_sentiments(loaded_model, sentence, word_idx, max_words)
-                                    mentions_both_list.append({"sentence": sentence, "score": score, "topic": "biden"})
-                                elif 'biden' in sentence and 'trump' in sentence:                                 # if the sentence contains both biden and trump
-                                    score = predict_sentiments(loaded_model, sentence, word_idx, max_words)
-                                    mentions_both_list.append({"sentence": sentence, "score": score, "topic": "both"})
-                                else:
-                                    score = predict_sentiments(loaded_model, sentence, word_idx, max_words)
-                                    mentions_both_list.append({"sentence": sentence, "score": score, "topic": "none"})
-                        else:  
-                            mentions_both_list.append({"topic": "both"})
-                    elif 'trump' in input_text:
-                        mentions_both_list.append({"topic": "trump"})
-                    elif 'biden' in input_text:
-                        mentions_both_list.append({"topic": "biden"})
-                    else:
-                        mentions_both_list.append({"topic": "none"})
+                submissions = json.load(open(posts_file,))
+                # submissions_test = ["Biden isn't the best president ever.", "Biden is the best president ever. https://github.com/jacobanks", "Biden is awesome", "I don't know about Biden.", "Biden is terrible!", "I don't like Biden."]
+                analyzed_text = []
 
-                    # Analyze whole post
-                    overall_result = predict_sentiments(loaded_model, input_text, word_idx, max_words)
-                    analyzed_text.append({"id": data_sample['id'], "score": overall_result, "mentions": mentions_both_list})
+                count = 0
+                for data_sample in submissions:
+                    input_text = ""
+                    if site == 'Reddit':
+                        input_text = data_sample["body"].lower()
+                    elif site == 'Twitter':
+                        input_text = data_sample["tweet"].lower()
+
+                    print("\rPredicting sentiment polarity... analyzed {} posts.".format(count), end="")
+                    if len(input_text) > 5:                    
+                        mentions_both_list = []
+                        # Analyze parts that mention different candidates
+                        if 'trump' in input_text and 'biden' in input_text:
+                            sentences = sent_tokenize(input_text)
+                            if len(sentences) > 1:                              # if the input text contains more than one sentence
+                                for sentence in sentences:
+                                    if 'trump' in sentence and 'biden' not in sentence:                                 # if the sentence contains only trump
+                                        score = predict_sentiments(loaded_model, sentence, word_idx, max_words)
+                                        mentions_both_list.append({"sentence": sentence, "score": score, "topic": "trump"})
+                                    elif 'biden' in sentence and 'trump' not in sentence:                                 # if the sentence contains only biden
+                                        score = predict_sentiments(loaded_model, sentence, word_idx, max_words)
+                                        mentions_both_list.append({"sentence": sentence, "score": score, "topic": "biden"})
+                                    elif 'biden' in sentence and 'trump' in sentence:                                 # if the sentence contains both biden and trump
+                                        score = predict_sentiments(loaded_model, sentence, word_idx, max_words)
+                                        mentions_both_list.append({"sentence": sentence, "score": score, "topic": "both"})
+                                    else:
+                                        score = predict_sentiments(loaded_model, sentence, word_idx, max_words)
+                                        mentions_both_list.append({"sentence": sentence, "score": score, "topic": "none"})
+                            else:  
+                                mentions_both_list.append({"topic": "both"})
+                        elif 'trump' in input_text:
+                            mentions_both_list.append({"topic": "trump"})
+                        elif 'biden' in input_text:
+                            mentions_both_list.append({"topic": "biden"})
+                        else:
+                            mentions_both_list.append({"topic": "none"})
+
+                        # Analyze whole post
+                        overall_result = predict_sentiments(loaded_model, input_text, word_idx, max_words)
+                        post_id = data_sample["id"] if site == 'Reddit' else data_sample["tweet_id"]
+                        analyzed_text.append({"id": post_id, "score": overall_result, "mentions": mentions_both_list})
+                    
+                        count += 1
+                        if count % 1000 == 0:
+                            with open('Data/' + site + '/scores/' + file + '_scores.json', 'w') as outfile:
+                                outfile.write(json.dumps(analyzed_text, indent=4))
                 
-                    count += 1
-                    if count % 1000 == 0:
-                        with open(file + '_comments_analyzed.json', 'w') as outfile:
-                            outfile.write(json.dumps(analyzed_text, indent=4))
-            
-            print("\nSaving analyzed text to " + file + "_comments_analyzed.json")
-            with open(file + '_comments_analyzed.json', 'w') as outfile:
-                outfile.write(json.dumps(analyzed_text, indent=4))
+                print("\nSaving analyzed text to " + file + "_scores.json")
+                with open('Data/' + site + '/scores/' + file + '_scores.json', 'w') as outfile:
+                    outfile.write(json.dumps(analyzed_text, indent=4))
