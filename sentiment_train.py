@@ -1,4 +1,5 @@
 import numpy as np
+import tensorflow as tf
 import keras
 from keras.models import Sequential
 from keras.layers import Dense
@@ -44,6 +45,7 @@ def build_model(weight_matrix, max_words, EMBEDDING_DIM):
     model.add(Dropout(0.50))
     model.add(Dense(5, activation='softmax'))
     # try using different optimizers and different optimizer configs
+    tf.keras.Optimizer.Adam(learning_rate=0.001)
     model.compile(loss='categorical_crossentropy', optimizer='adam', metrics=['accuracy'])
     print(model.summary())
     return model
@@ -83,14 +85,14 @@ def predict_sentiments(trained_model, input_text, word_idx, max_words):
 
         # get score from the model
         score = trained_model.predict(live_list_np, batch_size=1, verbose=0)
-        # single_score = np.round(np.argmax(score)/5, decimals=2) # maximum of the array i.e single band
+        single_score = np.argmax(score)/5# maximum of the array i.e single band
 
         # weighted score of top 3 bands
-        top_3_index = np.argsort(score)[0][-3:]
-        top_3_scores = score[0][top_3_index]
-        top_3_weights = top_3_scores/np.sum(top_3_scores)
-        top_3_score = np.round(np.dot(top_3_index, top_3_weights)/5, decimals = 2)
-        scores.append(top_3_score)
+        # top_3_index = np.argsort(score)[0][-3:]
+        # top_3_scores = score[0][top_3_index]
+        # top_3_weights = top_3_scores/np.sum(top_3_scores)
+        # top_3_score = np.round(np.dot(top_3_index, top_3_weights)/5, decimals = 2)
+        scores.append(single_score)
 
     if len(scores) > 1:
         final_score = np.mean(scores)     # Get the average score of all the chunks
@@ -102,10 +104,10 @@ def predict_sentiments(trained_model, input_text, word_idx, max_words):
 if __name__ == "__main__":
     max_words = 56 # max no of words in training data
     batch_size = 2048 # batch size for training
-    EMBEDDING_DIM = 200 # size of the word embeddings
+    EMBEDDING_DIM = 100 # size of the word embeddings
     train_flag = False # set True if in training mode else False if in prediction mode
     epochs = 100
-    gloveFile = 'Data/glove/glove.twitter.27B/glove.twitter.27B.200d.txt'
+    gloveFile = 'Data/glove/glove.twitter.27B/glove.twitter.27B.100d.txt'
 
     if train_flag:
         # Load Training Data
@@ -126,6 +128,7 @@ if __name__ == "__main__":
         print("Loading Model from " + model)
         loaded_model = load_model(model)
         loaded_model.summary()
+        polarity_sum = {"Very Negative": 0, "Negative": 0, "Neutral": 0, "Positive": 0, "Very Positive": 0}
 
         for site in sites:
             for file in data:
@@ -137,19 +140,16 @@ if __name__ == "__main__":
                     posts_file = posts_file + '_tweets.json'
 
                 submissions = json.load(open(posts_file,))
-                # submissions_test = ["Biden isn't the best president ever.", "Biden is the best president ever. https://github.com/jacobanks", "Biden is awesome", "I don't know about Biden.", "Biden is terrible!", "I don't like Biden."]
+                # submissions_test = ["Biden isn't the best president ever.", "Biden is the best president ever. https://github.com/jacobanks", "Biden is the worst president ever.", "Biden is awesome", "I don't know about Biden.", "Biden is terrible!", "I don't like Biden."]
                 analyzed_text = []
 
                 count = 0
                 for data_sample in submissions:
-                    input_text = ""
-                    if site == 'Reddit':
-                        input_text = data_sample["body"].lower()
-                    elif site == 'Twitter':
-                        input_text = data_sample["tweet"].lower()
+                    input_text = str(data_sample["body"])
 
                     print("\rPredicting sentiment polarity... analyzed {} posts.".format(count), end="")
-                    if len(input_text) > 5:                    
+                    if len(input_text) > 5:    
+                        input_text = input_text.lower()                                 
                         mentions_both_list = []
                         # Analyze parts that mention different candidates
                         if 'trump' in input_text and 'biden' in input_text:
@@ -179,14 +179,13 @@ if __name__ == "__main__":
 
                         # Analyze whole post
                         overall_result = predict_sentiments(loaded_model, input_text, word_idx, max_words)
-                        post_id = data_sample["id"] if site == 'Reddit' else data_sample["tweet_id"]
-                        analyzed_text.append({"id": post_id, "score": overall_result, "mentions": mentions_both_list})
-                    
+                        analyzed_text.append({"id": data_sample["id"], "score": overall_result, "mentions": mentions_both_list})
+
                         count += 1
                         if count % 1000 == 0:
-                            with open('Data/' + site + '/scores/' + file + '_scores.json', 'w') as outfile:
+                            with open('Data/' + site + '/scores/' + file + '_scores_final.json', 'w') as outfile:
                                 outfile.write(json.dumps(analyzed_text, indent=4))
                 
                 print("\nSaving analyzed text to " + file + "_scores.json")
-                with open('Data/' + site + '/scores/' + file + '_scores.json', 'w') as outfile:
+                with open('Data/' + site + '/scores/' + file + '_scores_final.json', 'w') as outfile:
                     outfile.write(json.dumps(analyzed_text, indent=4))

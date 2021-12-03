@@ -59,41 +59,24 @@ def training_data_split(all_data, splitPercent):
     return train_only, test_only, dev_only
 
 def embed_words(data, word_idx, max_seq_len):
-    print("Processing data for tensorflow...")
     no_rows = len(data)
     ids = np.zeros((no_rows, max_seq_len), dtype='int32')
-    # convert keys in dict to lower case
     word_idx_lwr =  {k.lower(): v for k, v in word_idx.items()}
     idx = 0
 
-    lengths = []
     for index, row in data.iterrows():
         sentence = (row['Phrase'])
-        sentence_words = word_tokenize(contractions.fix(sentence))
-        lengths.append(len(sentence_words))
-
+        sentence_words = process_input_text(sentence.lower())
         i = 0
         for word, tag in pos_tag(sentence_words):
-            word_lwr = word.lower()
-            if tag.startswith("NN"):
-                pos = 'n'
-            elif tag.startswith('VB'):
-                pos = 'v'
-            else:
-                pos = 'a'
-
-            lemmatizer = WordNetLemmatizer()
-            word_lwr = lemmatizer.lemmatize(word_lwr, pos)
-
             try:
-                ids[idx][i] =  word_idx_lwr[word_lwr]
+                ids[idx][i] =  word_idx_lwr[word]
             except Exception as e:
                 if str(e) == word:
                     ids[idx][i] = 0
                 continue
             i = i + 1
         idx = idx + 1
-
     return ids
 
 def labels_matrix(data):
@@ -101,7 +84,7 @@ def labels_matrix(data):
     lables_float = labels.astype(float)
 
     cats = ['0','1','2','3','4']
-    labels_mult = (lables_float * 5).astype(int)
+    labels_mult = ((lables_float * 10) / 2).astype(int)
     dummies = pd.get_dummies(labels_mult, prefix='', prefix_sep='')
     dummies = dummies.T.reindex(cats).T.fillna(0)
     labels_matrix = dummies.values
