@@ -7,31 +7,32 @@ from keras.layers.embeddings import Embedding
 from keras.layers import Bidirectional
 from keras.layers import Dropout
 from keras.models import load_model
+import keras_tuner as kt
 from nltk.tokenize import sent_tokenize
 import json
 import helpers as helper
+import pandas as pd
 
 def load_training_data(gloveFile, max_words):
     # Load embeddings for the filtered glove list
     weight_matrix, word_idx = helper.load_embeddings(gloveFile)
 
     # create test, validation and trainng data
-    all_data = helper.read_data()
-    train_data, test_data, dev_data = helper.training_data_split(all_data, 0.8)
-
-    train_data = train_data.reset_index()
-    dev_data = dev_data.reset_index()
-    test_data = test_data.reset_index()
+    train_data, test_data, val_data = helper.read_data()
 
     # load Training data matrix
+    print("Embedding Words...")
     train_x = helper.embed_words(train_data, word_idx, max_words)
     test_x = helper.embed_words(test_data, word_idx, max_words)
-    val_x = helper.embed_words(dev_data, word_idx, max_words)
+    val_x = helper.embed_words(val_data, word_idx, max_words)
 
     # load labels data matrix
-    train_y = helper.labels_matrix(train_data)
-    val_y = helper.labels_matrix(dev_data)
-    test_y = helper.labels_matrix(test_data)
+    train_y = [ x["label"] for x in train_data ]
+    train_y = pd.get_dummies(train_y, prefix='', prefix_sep='')
+    val_y = [ x["label"] for x in val_data ]
+    val_y = pd.get_dummies(val_y, prefix='', prefix_sep='')
+    test_y = [ x["label"] for x in test_data ]
+    test_y = pd.get_dummies(test_y, prefix='', prefix_sep='')
 
     return train_x, train_y, test_x, test_y, val_x, val_y, weight_matrix, word_idx
         
@@ -39,9 +40,9 @@ def build_model(weight_matrix, max_words, EMBEDDING_DIM):
     # create the model
     model = Sequential()
     model.add(Embedding(len(weight_matrix), EMBEDDING_DIM, weights=[weight_matrix], input_length=max_words, trainable=False))
-    model.add(Bidirectional(LSTM(512, dropout=0.3, activation='tanh')))
-    model.add(Dense(512, activation='sigmoid'))
-    model.add(Dropout(0.50))
+    model.add(LSTM(128, dropout=0.2, activation='tanh'))
+    model.add(Dense(32, activation='relu'))
+    model.add(Dropout(0.5))
     model.add(Dense(5, activation='softmax'))
     # try using different optimizers and different optimizer configs
     model.compile(loss='categorical_crossentropy', optimizer='adam', metrics=['accuracy'])
@@ -50,11 +51,11 @@ def build_model(weight_matrix, max_words, EMBEDDING_DIM):
 
 def train_model(model, num_epochs, train_x, train_y, test_x, test_y, val_x, val_y, batch_size) :
     # save the best model and early stopping
-    saveBestModel = keras.callbacks.ModelCheckpoint('model/optimized_model.hdf5', monitor='val_accuracy', verbose=0, save_best_only=True, save_weights_only=False, mode='auto', save_freq='epoch')
-    earlyStopping = keras.callbacks.EarlyStopping(monitor='val_loss', patience=15, verbose=1, mode='min')
+    saveBestModel = keras.callbacks.ModelCheckpoint('model/optimized_model_1.hdf5', monitor='val_accuracy', verbose=0, save_best_only=True, save_weights_only=False, mode='auto', save_freq='epoch')
+    # earlyStopping = keras.callbacks.EarlyStopping(monitor='val_loss', patience=15, verbose=1, mode='min')
     # earlyStopping = keras.callbacks.EarlyStopping(monitor='val_accuracy', verbose=1, mode='max', min_delta=1)
     # Fit the model
-    model.fit(train_x, train_y, batch_size=batch_size, epochs=num_epochs, validation_data=(val_x, val_y), callbacks=[saveBestModel, earlyStopping], shuffle=True)
+    model.fit(train_x, train_y, batch_size=batch_size, epochs=num_epochs, validation_data=(val_x, val_y), callbacks=[saveBestModel], shuffle=True)
     # Final evaluation of the model
     score, acc = model.evaluate(test_x, test_y, batch_size=batch_size)
     print('Test score:', score)
@@ -100,12 +101,12 @@ def predict_sentiments(trained_model, input_text, word_idx, max_words):
     return final_score
 
 if __name__ == "__main__":
-    max_words = 56 # max no of words in training data
-    batch_size = 2048 # batch size for training
-    EMBEDDING_DIM = 200 # size of the word embeddings
-    train_flag = False # set True if in training mode else False if in prediction mode
+    max_words = 56 # max no of words in training datas
+    batch_size = 32 # batch size for training
+    EMBEDDING_DIM = 100 # size of the word embeddings
+    train_flag = True # set True if in training mode else False if in prediction mode
     epochs = 100
-    gloveFile = 'Data/glove/glove.twitter.27B/glove.twitter.27B.200d.txt'
+    gloveFile = 'Data/glove/glove.twitter.27B/glove.twitter.27B.100d.txt'
 
     if train_flag:
         # Load Training Data
@@ -119,9 +120,9 @@ if __name__ == "__main__":
         print("Saved model to disk")
     else:
         weight_matrix, word_idx = helper.load_embeddings(gloveFile)
-        model = 'model/optimized_model.hdf5'
-        sites = ['Reddit', 'Twitter']
-        data = ['trump', 'biden']
+        model = 'model/optimized_model_final.hdf5'
+        sites = ['Twitter']
+        data = ['trump']
 
         print("Loading Model from " + model)
         loaded_model = load_model(model)
@@ -129,11 +130,12 @@ if __name__ == "__main__":
 
         for site in sites:
             for file in data:
-                print("Loading data from " + file + "_comments.json")
                 posts_file = 'Data/' + site + '/' + file
                 if site == 'Reddit':
+                    print("Loading data from " + file + "_comments.json")
                     posts_file = posts_file + '_comments.json'
                 else:
+                    print("Loading data from " + file + "_tweets.json")
                     posts_file = posts_file + '_tweets.json'
 
                 submissions = json.load(open(posts_file,))
@@ -142,14 +144,11 @@ if __name__ == "__main__":
 
                 count = 0
                 for data_sample in submissions:
-                    input_text = ""
-                    if site == 'Reddit':
-                        input_text = data_sample["body"].lower()
-                    elif site == 'Twitter':
-                        input_text = data_sample["tweet"].lower()
+                    input_text = str(data_sample["body"])
 
                     print("\rPredicting sentiment polarity... analyzed {} posts.".format(count), end="")
-                    if len(input_text) > 5:                    
+                    if len(input_text) > 5:   
+                        input_text = input_text.lower()                 
                         mentions_both_list = []
                         # Analyze parts that mention different candidates
                         if 'trump' in input_text and 'biden' in input_text:
@@ -179,14 +178,13 @@ if __name__ == "__main__":
 
                         # Analyze whole post
                         overall_result = predict_sentiments(loaded_model, input_text, word_idx, max_words)
-                        post_id = data_sample["id"] if site == 'Reddit' else data_sample["tweet_id"]
-                        analyzed_text.append({"id": post_id, "score": overall_result, "mentions": mentions_both_list})
+                        analyzed_text.append({"id": data_sample["id"], "score": overall_result, "mentions": mentions_both_list})
                     
                         count += 1
                         if count % 1000 == 0:
-                            with open('Data/' + site + '/scores/' + file + '_scores.json', 'w') as outfile:
+                            with open('Data/' + site + '/scores/' + file + '_scores1.json', 'w') as outfile:
                                 outfile.write(json.dumps(analyzed_text, indent=4))
                 
                 print("\nSaving analyzed text to " + file + "_scores.json")
-                with open('Data/' + site + '/scores/' + file + '_scores.json', 'w') as outfile:
+                with open('Data/' + site + '/scores/' + file + '_scores1.json', 'w') as outfile:
                     outfile.write(json.dumps(analyzed_text, indent=4))
