@@ -1,4 +1,5 @@
 import numpy as np
+import tensorflow as tf
 import keras
 from keras.models import Sequential
 from keras.layers import Dense
@@ -27,25 +28,23 @@ def load_training_data(gloveFile, max_words):
     val_x = helper.embed_words(val_data, word_idx, max_words)
 
     # load labels data matrix
-    train_y = [ x["label"] for x in train_data ]
-    train_y = pd.get_dummies(train_y, prefix='', prefix_sep='')
-    val_y = [ x["label"] for x in val_data ]
-    val_y = pd.get_dummies(val_y, prefix='', prefix_sep='')
-    test_y = [ x["label"] for x in test_data ]
-    test_y = pd.get_dummies(test_y, prefix='', prefix_sep='')
-
+    train_y = helper.labels_matrix(train_data)
+    val_y = helper.labels_matrix(val_data)
+    test_y = helper.labels_matrix(test_data)
+    
     return train_x, train_y, test_x, test_y, val_x, val_y, weight_matrix, word_idx
         
 def build_model(weight_matrix, max_words, EMBEDDING_DIM):
     # create the model
     model = Sequential()
     model.add(Embedding(len(weight_matrix), EMBEDDING_DIM, weights=[weight_matrix], input_length=max_words, trainable=False))
-    model.add(LSTM(128, dropout=0.2, activation='tanh'))
-    model.add(Dense(32, activation='relu'))
-    model.add(Dropout(0.5))
+    model.add(LSTM(128))
+    # model.add(Dense(32, activation='relu'))
+    # model.add(Dropout(0.5))
     model.add(Dense(5, activation='softmax'))
     # try using different optimizers and different optimizer configs
-    model.compile(loss='categorical_crossentropy', optimizer='adam', metrics=['accuracy'])
+    opt = tf.keras.optimizers.Adam(learning_rate=0.000001)
+    model.compile(loss='categorical_crossentropy', optimizer=opt, metrics=['accuracy'])
     print(model.summary())
     return model
 
@@ -102,7 +101,7 @@ def predict_sentiments(trained_model, input_text, word_idx, max_words):
 
 if __name__ == "__main__":
     max_words = 56 # max no of words in training datas
-    batch_size = 32 # batch size for training
+    batch_size = 64 # batch size for training
     EMBEDDING_DIM = 100 # size of the word embeddings
     train_flag = True # set True if in training mode else False if in prediction mode
     epochs = 100

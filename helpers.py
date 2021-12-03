@@ -10,32 +10,46 @@ import pytreebank
 import sys
 
 def load_embeddings(embedding_path):
-    print("Loading Glove Model")
-    glove_model = {}
+    print('loading word embeddings from %s' % embedding_path)
     weight_vectors = []
-    with open(embedding_path,'r', encoding='utf-8') as f:
+    word_idx = {}
+    with codecs.open(embedding_path, encoding='utf-8') as f:
         for line in f:
-            split_line = line.split()
-            word = split_line[0]
-            embedding = np.array(split_line[1:], dtype=np.float32)
-            glove_model[word] = len(weight_vectors)
-            if len(embedding) != 100:
-                print(len(embedding))
-                print(word + str(embedding))
-            weight_vectors.append(embedding)
-
-    glove_model[u'-LRB-'] = glove_model.pop(u'(')
-    glove_model[u'-RRB-'] = glove_model.pop(u')')
+            word, vec = line.split(u' ', 1)
+            word_idx[word] = len(weight_vectors)
+        weight_vectors.append(np.array(vec.split(), dtype=np.float32))
+    # '(' and ')' are replaced by '-LRB-' and '-RRB-'
+    word_idx[u'-LRB-'] = word_idx.pop(u'(')
+    word_idx[u'-RRB-'] = word_idx.pop(u')')
+    # Random embedding vector for unknown words.
     weight_vectors.append(np.random.uniform(-0.05, 0.05, weight_vectors[0].shape).astype(np.float32))
-    print(f"{len(glove_model)} words loaded!")
-    return np.stack(weight_vectors), glove_model
+    return np.stack(weight_vectors), word_idx
+    # print("Loading Glove Model")
+    # glove_model = {}
+    # weight_vectors = []
+    # with open(embedding_path,'r', encoding='utf-8') as f:
+    #     for line in f:
+    #         split_line = line.split()
+    #         word = split_line[0]
+    #         embedding = np.array(split_line[1:], dtype=np.float32)
+    #         glove_model[word] = len(weight_vectors)
+    #         if len(embedding) != 100:
+    #             print(len(embedding))
+    #             print(word + str(embedding))
+    #         weight_vectors.append(embedding)
+
+    # glove_model[u'-LRB-'] = glove_model.pop(u'(')
+    # glove_model[u'-RRB-'] = glove_model.pop(u')')
+    # weight_vectors.append(np.random.uniform(-0.05, 0.05, weight_vectors[0].shape).astype(np.float32))
+    # print(f"{len(glove_model)} words loaded!")
+    # return np.stack(weight_vectors), glove_model
 
 def read_data():
     # read dictionary into df
     print("Reading Training Data...")
-    train_data = json.load(open("Data/TrainingData/sst_train.json",))
-    test_data = json.load(open("Data/TrainingData/sst_test.json",))
-    val_data = json.load(open("Data/TrainingData/sst_val.json",))         
+    train_data = pd.DataFrame(data=json.load(open("Data/TrainingData/sst_train.json",)))
+    test_data = pd.DataFrame(data=json.load(open("Data/TrainingData/sst_test.json",)))
+    val_data = pd.DataFrame(data=json.load(open("Data/TrainingData/sst_val.json",)))
     return train_data, test_data, val_data
 
 def embed_words(data, word_idx, max_seq_len):
@@ -44,7 +58,7 @@ def embed_words(data, word_idx, max_seq_len):
     word_idx_lwr =  {k.lower(): v for k, v in word_idx.items()}
     idx = 0
 
-    for row in data:
+    for index, row in data.iterrows():
         sentence = row['phrase']
         sentence_words = process_input_text(sentence.lower())
         i = 0
@@ -59,6 +73,18 @@ def embed_words(data, word_idx, max_seq_len):
             i += 1
         idx += 1
     return ids
+
+def labels_matrix(data):
+    labels = data['label']
+    lables_float = labels.astype(int)
+
+    cats = ['0','1','2','3','4']
+    labels_mult = ((lables_float * 10) / 2).astype(int)
+    dummies = pd.get_dummies(labels_mult, prefix='', prefix_sep='')
+    dummies = dummies.T.reindex(cats).T.fillna(0)
+    labels_matrix = dummies.values
+
+    return labels_matrix
 
 def process_input_text(input_text):
     input_text = re.sub('http[s]?://(?:[a-zA-Z]|[0-9]|[$-_@.&+#]|[!*\(\),]|'\
