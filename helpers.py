@@ -28,12 +28,12 @@ def load_embeddings(embedding_path):
 def read_data():
     # read dictionary into df
     print("Reading Training Data...")
-    df_data_sentence = pd.read_table('Data/dictionary.txt')
+    df_data_sentence = pd.read_table('Data/TrainingData/dictionary.txt')
     df_data_sentence_processed = df_data_sentence['Phrase|Index'].str.split('|', expand=True)
     df_data_sentence_processed = df_data_sentence_processed.rename(columns={0: 'Phrase', 1: 'phrase_ids'})
 
     # read sentiment labels into df
-    df_data_sentiment = pd.read_table('Data/sentiment_labels.txt')
+    df_data_sentiment = pd.read_table('Data/TrainingData/sentiment_labels.txt')
     df_data_sentiment_processed = df_data_sentiment['phrase ids|sentiment values'].str.split('|', expand=True)
     df_data_sentiment_processed = df_data_sentiment_processed.rename(columns={0: 'phrase_ids', 1: 'sentiment_values'})
 
@@ -52,9 +52,9 @@ def training_data_split(all_data, splitPercent):
     test_only = test_and_dev[msk_test]
     dev_only = test_and_dev[~msk_test]
 
-    dev_only.to_csv(os.path.join('Data/TrainingData/dev.csv'))
-    test_only.to_csv(os.path.join('Data/TrainingData/test.csv'))
-    train_only.to_csv(os.path.join('Data/TrainingData/train.csv'))
+    # dev_only.to_csv(os.path.join('Data/TrainingData/dev.csv'))
+    # test_only.to_csv(os.path.join('Data/TrainingData/test.csv'))
+    # train_only.to_csv(os.path.join('Data/TrainingData/train.csv'))
 
     return train_only, test_only, dev_only
 
