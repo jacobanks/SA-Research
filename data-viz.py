@@ -41,7 +41,7 @@ def scale_sentiment(result, polarity_sum):
     return polarity_sum
 
 times = []
-files = ['Data/Reddit/scores/trump_scores_final.json']
+files = ['Data/Reddit/scores/trump_scores_final.json', 'Data/Reddit/scores/biden_scores_final.json']
 polarity_sum_trump = {"Very Negative": 0, "Negative": 0, "Neutral": 0, "Positive": 0, "Very Positive": 0}
 polarity_sum_biden = {"Very Negative": 0, "Negative": 0, "Neutral": 0, "Positive": 0, "Very Positive": 0}
 polarity_sum_both = {"Very Negative": 0, "Negative": 0, "Neutral": 0, "Positive": 0, "Very Positive": 0}
