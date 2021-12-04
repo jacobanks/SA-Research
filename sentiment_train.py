@@ -25,12 +25,15 @@ def load_training_data(gloveFile, max_words):
     test_data = test_data.reset_index()
 
     # load Training data matrix
+    print("Processing words...")
     train_x = helper.embed_words(train_data, word_idx, max_words)
     test_x = helper.embed_words(test_data, word_idx, max_words)
     val_x = helper.embed_words(dev_data, word_idx, max_words)
 
     # load labels data matrix
+    print("Building labels matrices...")
     train_y = helper.labels_matrix(train_data)
+    print(train_y)
     val_y = helper.labels_matrix(dev_data)
     test_y = helper.labels_matrix(test_data)
 
@@ -45,16 +48,16 @@ def build_model(weight_matrix, max_words, EMBEDDING_DIM):
     model.add(Dropout(0.50))
     model.add(Dense(5, activation='softmax'))
     # try using different optimizers and different optimizer configs
-    tf.keras.Optimizer.Adam(learning_rate=0.001)
+    # tf.keras.Optimizer.Adam(learning_rate=0.001)
     model.compile(loss='categorical_crossentropy', optimizer='adam', metrics=['accuracy'])
     print(model.summary())
     return model
 
 def train_model(model, num_epochs, train_x, train_y, test_x, test_y, val_x, val_y, batch_size) :
     # save the best model and early stopping
-    saveBestModel = keras.callbacks.ModelCheckpoint('model/optimized_model.hdf5', monitor='val_accuracy', verbose=0, save_best_only=True, save_weights_only=False, mode='auto', save_freq='epoch')
+    saveBestModel = keras.callbacks.ModelCheckpoint('model/optimized_model_binary.hdf5', monitor='val_accuracy', verbose=1, save_best_only=True, save_weights_only=False, mode='auto', save_freq='epoch')
     earlyStopping = keras.callbacks.EarlyStopping(monitor='val_loss', patience=15, verbose=1, mode='min')
-    # earlyStopping = keras.callbacks.EarlyStopping(monitor='val_accuracy', verbose=1, mode='max', min_delta=1)
+
     # Fit the model
     model.fit(train_x, train_y, batch_size=batch_size, epochs=num_epochs, validation_data=(val_x, val_y), callbacks=[saveBestModel, earlyStopping], shuffle=True)
     # Final evaluation of the model
@@ -105,7 +108,7 @@ if __name__ == "__main__":
     max_words = 56 # max no of words in training data
     batch_size = 2048 # batch size for training
     EMBEDDING_DIM = 100 # size of the word embeddings
-    train_flag = False # set True if in training mode else False if in prediction mode
+    train_flag = True # set True if in training mode else False if in prediction mode
     epochs = 100
     gloveFile = 'Data/glove/glove.twitter.27B/glove.twitter.27B.100d.txt'
 
@@ -117,13 +120,13 @@ if __name__ == "__main__":
         # train the model
         trained_model = train_model(model, epochs, train_x, train_y, test_x, test_y, val_x, val_y, batch_size)
         # serialize weights to HDF5
-        trained_model.save("model/optimized_model_final_1.hdf5")
-        print("Saved model to disk")
+        # trained_model.save("model/optimized_model_final_1.hdf5")
+        # print("Saved model to disk")
     else:
         weight_matrix, word_idx = helper.load_embeddings(gloveFile)
         model = 'model/optimized_model.hdf5'
-        sites = ['Reddit', 'Twitter']
-        data = ['trump', 'biden']
+        sites = ['Twitter']
+        data = ['biden']
 
         print("Loading Model from " + model)
         loaded_model = load_model(model)
@@ -144,7 +147,7 @@ if __name__ == "__main__":
                 analyzed_text = []
 
                 count = 0
-                for data_sample in submissions:
+                for data_sample in submissions[:100000]:
                     input_text = str(data_sample["body"])
 
                     print("\rPredicting sentiment polarity... analyzed {} posts.".format(count), end="")

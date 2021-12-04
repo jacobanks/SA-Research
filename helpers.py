@@ -15,7 +15,7 @@ def load_embeddings(embedding_path):
   with codecs.open(embedding_path, encoding='utf-8') as f:
     for line in f:
         word, vec = line.split(u' ', 1)
-        word_idx[word] = len(weight_vectors)
+        word_idx[word.lower()] = len(weight_vectors)
         weight_vectors.append(np.array(vec.split(), dtype=np.float32))
   # '(' and ')' are replaced by '-LRB-' and '-RRB-'
   word_idx[u'-LRB-'] = word_idx.pop(u'(')
@@ -61,16 +61,16 @@ def training_data_split(all_data, splitPercent):
 def embed_words(data, word_idx, max_seq_len):
     no_rows = len(data)
     ids = np.zeros((no_rows, max_seq_len), dtype='int32')
-    word_idx_lwr =  {k.lower(): v for k, v in word_idx.items()}
+    # word_idx_lwr =  {k.lower(): v for k, v in word_idx.items()}
     idx = 0
 
     for index, row in data.iterrows():
         sentence = (row['Phrase'])
-        sentence_words = process_input_text(sentence.lower())
+        sentence_words = process_input_text(sentence)
         i = 0
-        for word, tag in pos_tag(sentence_words):
+        for word in sentence_words:
             try:
-                ids[idx][i] =  word_idx_lwr[word]
+                ids[idx][i] =  word_idx[word]
             except Exception as e:
                 if str(e) == word:
                     ids[idx][i] = 0
@@ -93,7 +93,7 @@ def labels_matrix(data):
 
 def process_input_text(input_text):
     input_text = re.sub('http[s]?://(?:[a-zA-Z]|[0-9]|[$-_@.&+#]|[!*\(\),]|'\
-                        '(?:%[0-9a-fA-F][0-9a-fA-F]))+','', input_text)
+                        '(?:%[0-9a-fA-F][0-9a-fA-F]))+','', input_text.lower())
     input_text = re.sub("(@[A-Za-z0-9_]+)","", input_text)
     unprocessed_tokens = word_tokenize(contractions.fix(input_text))
     processed_tokens = []
