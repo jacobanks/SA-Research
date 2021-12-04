@@ -55,7 +55,7 @@ def build_model(weight_matrix, max_words, EMBEDDING_DIM):
 
 def train_model(model, num_epochs, train_x, train_y, test_x, test_y, val_x, val_y, batch_size) :
     # save the best model and early stopping
-    saveBestModel = keras.callbacks.ModelCheckpoint('model/optimized_model_binary.hdf5', monitor='val_accuracy', verbose=1, save_best_only=True, save_weights_only=False, mode='auto', save_freq='epoch')
+    saveBestModel = keras.callbacks.ModelCheckpoint('model/optimized_model.hdf5', monitor='val_accuracy', verbose=1, save_best_only=True, save_weights_only=False, mode='auto', save_freq='epoch')
     earlyStopping = keras.callbacks.EarlyStopping(monitor='val_loss', patience=15, verbose=1, mode='min')
 
     # Fit the model
@@ -108,7 +108,7 @@ if __name__ == "__main__":
     max_words = 56 # max no of words in training data
     batch_size = 2048 # batch size for training
     EMBEDDING_DIM = 100 # size of the word embeddings
-    train_flag = True # set True if in training mode else False if in prediction mode
+    train_flag = False # set True if in training mode else False if in prediction mode
     epochs = 100
     gloveFile = 'Data/glove/glove.twitter.27B/glove.twitter.27B.100d.txt'
 
@@ -135,19 +135,20 @@ if __name__ == "__main__":
 
         for site in sites:
             for file in data:
-                print("Loading data from " + file + "_comments.json")
+                save_file = 'Data/' + site + '/scores/' + file + '_scores_final.json'
                 posts_file = 'Data/' + site + '/' + file
                 if site == 'Reddit':
                     posts_file = posts_file + '_comments.json'
                 else:
                     posts_file = posts_file + '_tweets.json'
 
+                print("Loading data from " + posts_file)
                 submissions = json.load(open(posts_file,))
                 # submissions_test = ["Biden isn't the best president ever.", "Biden is the best president ever. https://github.com/jacobanks", "Biden is the worst president ever.", "Biden is awesome", "I don't know about Biden.", "Biden is terrible!", "I don't like Biden."]
                 analyzed_text = []
 
                 count = 0
-                for data_sample in submissions[:100000]:
+                for data_sample in submissions:
                     input_text = str(data_sample["body"])
 
                     print("\rPredicting sentiment polarity... analyzed {} posts.".format(count), end="")
@@ -169,8 +170,8 @@ if __name__ == "__main__":
                                         score = predict_sentiments(loaded_model, sentence, word_idx, max_words)
                                         mentions_both_list.append({"sentence": sentence, "score": score, "topic": "both"})
                                     else:
-                                        score = predict_sentiments(loaded_model, sentence, word_idx, max_words)
-                                        mentions_both_list.append({"sentence": sentence, "score": score, "topic": "none"})
+                                        # score = predict_sentiments(loaded_model, sentence, word_idx, max_words)
+                                        mentions_both_list.append({"sentence": sentence, "topic": "none"})
                             else:  
                                 mentions_both_list.append({"topic": "both"})
                         elif 'trump' in input_text:
@@ -186,9 +187,9 @@ if __name__ == "__main__":
 
                         count += 1
                         if count % 1000 == 0:
-                            with open('Data/' + site + '/scores/' + file + '_scores_final.json', 'w') as outfile:
+                            with open(save_file, 'w') as outfile:
                                 outfile.write(json.dumps(analyzed_text, indent=4))
                 
-                print("\nSaving analyzed text to " + file + "_scores.json")
-                with open('Data/' + site + '/scores/' + file + '_scores_final.json', 'w') as outfile:
+                print("\nSaving analyzed text to " + save_file)
+                with open(save_file, 'w') as outfile:
                     outfile.write(json.dumps(analyzed_text, indent=4))

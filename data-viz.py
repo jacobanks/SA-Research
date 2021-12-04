@@ -1,5 +1,5 @@
 # from datetime import datetime
-import json
+import json, csv, codecs
 from nltk import FreqDist
 import matplotlib.pyplot as plt
 import numpy as np
@@ -48,7 +48,7 @@ polarity_sum_both = {"V. Negative": 0, "Negative": 0, "Neutral": 0, "Positive": 
 
 for file in files:
     polarity_scores = json.load(open(file,))
-    for data_sample in polarity_scores[:100000]:
+    for data_sample in polarity_scores:
         for data in data_sample["mentions"]:
             if "score" in data:
                 result = data["score"]
