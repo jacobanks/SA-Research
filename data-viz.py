@@ -41,7 +41,7 @@ def scale_sentiment(result, polarity_sum):
     return polarity_sum
 
 times = []
-files = ['Data/Reddit/scores/trump_scores_final.json', 'Data/Reddit/scores/biden_scores_final.json']
+files = ['Data/Twitter/scores/biden_scores_final.json', 'Data/Twitter/scores/trump_scores_final.json']
 polarity_sum_trump = {"V. Negative": 0, "Negative": 0, "Neutral": 0, "Positive": 0, "V. Positive": 0}
 polarity_sum_biden = {"V. Negative": 0, "Negative": 0, "Neutral": 0, "Positive": 0, "V. Positive": 0}
 polarity_sum_both = {"V. Negative": 0, "Negative": 0, "Neutral": 0, "Positive": 0, "V. Positive": 0}
@@ -55,12 +55,19 @@ for file in files:
             else:
                 result = data_sample["score"]
     
-            if data["topic"] == "biden":
-                polarity_sum_biden = scale_sentiment(result, polarity_sum_biden)
-            elif data["topic"] == "trump":
-                polarity_sum_trump = scale_sentiment(result, polarity_sum_trump)
-            elif data["topic"] == "both":
-                polarity_sum_both = scale_sentiment(result, polarity_sum_both)      
+        if data["topic"] == "biden":
+            polarity_sum_biden = scale_sentiment(result, polarity_sum_biden)
+        elif data["topic"] == "trump":
+            polarity_sum_trump = scale_sentiment(result, polarity_sum_trump)
+        elif data["topic"] == "both":
+            polarity_sum_both = scale_sentiment(result, polarity_sum_both)    
+
+        # if data_sample["mentions"][0]["topic"] == "biden":
+        #     polarity_sum_biden = scale_sentiment(result, polarity_sum_biden)
+        # elif data_sample["mentions"][0]["topic"] == "trump":
+        #     polarity_sum_trump = scale_sentiment(result, polarity_sum_trump)
+        # elif data_sample["mentions"][0]["topic"] == "both":
+        #     polarity_sum_both = scale_sentiment(result, polarity_sum_both)       
 
 trump_total = sum(polarity_sum_trump.values())
 for key, value in polarity_sum_trump.items():
@@ -120,6 +127,6 @@ values_biden = np.array(values_biden)
 axs.bar(names, values_both, color=(0.4, 0.4, 0.4, 0.6), bottom=values_trump+values_biden, label="Both")
 axs.legend()
 
-plt.title('Candidate Sentiment Distribution Reddit')
+plt.title('Candidate Sentiment Distribution Twitter')
 
 plt.show()
