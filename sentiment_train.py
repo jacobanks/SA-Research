@@ -43,8 +43,8 @@ def build_model(weight_matrix, max_words, EMBEDDING_DIM):
     # model.add(Dropout(0.5))
     model.add(Dense(5, activation='softmax'))
     # try using different optimizers and different optimizer configs
-    opt = tf.keras.optimizers.Adam(learning_rate=0.000001)
-    model.compile(loss='categorical_crossentropy', optimizer=opt, metrics=['accuracy'])
+    # opt = tf.keras.optimizers.Adam(learning_rate=0.000001)
+    model.compile(loss='categorical_crossentropy', optimizer="adam", metrics=['accuracy'])
     print(model.summary())
     return model
 
