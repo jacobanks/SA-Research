@@ -125,8 +125,8 @@ if __name__ == "__main__":
     else:
         weight_matrix, word_idx = helper.load_embeddings(gloveFile)
         model = 'model/optimized_model.hdf5'
-        sites = ['Twitter']
-        data = ['biden']
+        sites = ['Twitter', 'Reddit']
+        data = ['biden', 'trump']
 
         print("Loading Model from " + model)
         loaded_model = load_model(model)
